@@ -1,0 +1,19 @@
+# .github/workflows/ai-review.yml in your repo
+name: AI Code Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: ${{ !github.event.pull_request.draft }}
+    uses: filecoin-project/ff-sec-action/.github/workflows/ai-code-review.yml@v1
+    with:
+      domain: filecoin            # picks prompts/filecoin.md
+      fail-on-severity: none      # or: critical | high | medium
+    secrets:
+      anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
