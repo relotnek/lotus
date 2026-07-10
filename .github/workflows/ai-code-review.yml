@@ -1,0 +1,64 @@
+# Manual (on-demand) AI review — consumer version.
+# Actions tab -> "AI Code Review (manual)" -> Run workflow -> enter a PR number.
+# Or: gh workflow run "AI Code Review (manual)" -f pr-number=123
+#
+# The action is fetched from filecoin-project/ff-sec-actions by the `uses:`
+# line and reads the PR diff via the GitHub API — no checkout step needed.
+# Requires the ANTHROPIC_API_KEY secret on this repo.
+# Pin @main until ff-sec-actions tags a v1 release, then switch to @v1.
+name: AI Code Review (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: PR number in THIS repo to review
+        required: true
+      domain:
+        description: Domain prompt (prompts/<domain>.md in ff-sec-actions)
+        required: false
+        default: filecoin
+      model:
+        description: Claude model ID
+        required: false
+        default: claude-opus-4-8
+      effort:
+        description: "Effort: low | medium | high | max"
+        required: false
+        default: high
+      fail-on-severity:
+        description: "Fail job at/above: none | critical | high | medium | low"
+        required: false
+        default: none
+      post-comment:
+        description: Post the sticky PR comment (job summary always written)
+        required: false
+        type: choice
+        options: ["false", "true"]
+        default: "false"
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: AI code review
+        id: ai
+        uses: filecoin-project/ff-sec-actions/actions/ai-code-review@main
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          pr-number: ${{ inputs.pr-number }}
+          domain: ${{ inputs.domain }}
+          model: ${{ inputs.model }}
+          effort: ${{ inputs.effort }}
+          fail-on-severity: ${{ inputs.fail-on-severity }}
+          post-comment: ${{ inputs.post-comment }}
+
+      - name: Report outputs
+        if: always()
+        run: |
+          echo "findings-count:    ${{ steps.ai.outputs.findings-count }}"
+          echo "highest-severity:  ${{ steps.ai.outputs.highest-severity }}"
+          echo "findings-json:     ${{ steps.ai.outputs.findings-json }}"
