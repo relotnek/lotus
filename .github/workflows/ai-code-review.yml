@@ -1,52 +1,33 @@
-# Manual test harness for the ai-code-review action.
-# Run from the Actions tab (workflow_dispatch) against any PR number.
+# Manual (on-demand) AI review for a CONSUMER repo.
+# Drop this into the consumer repo as .github/workflows/ai-review-manual.yml,
+# then: Actions tab -> "AI Code Review (manual)" -> Run workflow -> enter a PR number.
+# Or from the CLI:  gh workflow run "AI Code Review (manual)" -f pr-number=123
 #
-# This checks out THIS repo at the ref you dispatch from and runs the LOCAL
-# action (./actions/ai-code-review), so you can test branch changes before
-# tagging a release — unlike the reusable workflow, which uses the pinned @v1.
+# Requirements in the consumer repo:
+# - ANTHROPIC_API_KEY secret visible to this repo (org secret recommended)
+# - If ff-sec-actions is private: it must allow org repo access
+#   (ff-sec-actions Settings -> Actions -> General -> Access)
+# - This file must be on the default branch before it appears in the Actions tab
 #
-# Notes:
-# - Requires the ANTHROPIC_API_KEY secret on this repo (or via the org).
-# - `repo` defaults to this repository. To review a PR in ANOTHER repo, the
-#   default github.token won't have access — add a GH_PAT secret (fine-grained
-#   PAT with Pull requests read/write on the target repo) and it is used
-#   automatically when present.
-# - post-comment defaults to "false" for safe testing: results go to the job
-#   summary only. Flip to "true" to exercise the sticky-comment path.
+# Use @main until a v1 tag exists in ff-sec-actions; switch to @v1 after tagging.
 name: AI Code Review (manual)
 
 on:
   workflow_dispatch:
     inputs:
       pr-number:
-        description: PR number to review
+        description: PR number in THIS repo to review
         required: true
-      repo:
-        description: owner/repo containing the PR (blank = this repo)
-        required: false
-        default: ""
       domain:
-        description: Domain prompt (prompts/<domain>.md)
+        description: Domain prompt (prompts/<domain>.md in ff-sec-actions)
         required: false
         default: filecoin
-      model:
-        description: Claude model ID
-        required: false
-        default: claude-opus-4-8
-      effort:
-        description: "Effort: low | medium | high | max"
-        required: false
-        default: high
-      fail-on-severity:
-        description: "Fail job at/above: none | critical | high | medium | low"
-        required: false
-        default: none
       post-comment:
         description: Post the sticky PR comment (job summary always written)
         required: false
         type: choice
-        options: ["false", "true"]
-        default: "false"
+        options: ["true", "false"]
+        default: "true"
 
 jobs:
   review:
@@ -55,26 +36,16 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Checkout this repo (the action + prompts under test)
-        uses: actions/checkout@v4
-
-      - name: AI code review
+      # No checkout needed: the action fetches the PR diff via the GitHub API.
+      - uses: filecoin-project/ff-sec-actions/actions/ai-code-review@main
         id: ai
-        uses: ./actions/ai-code-review
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github-token: ${{ secrets.GH_PAT || github.token }}
           pr-number: ${{ inputs.pr-number }}
-          repo: ${{ inputs.repo }}
           domain: ${{ inputs.domain }}
-          model: ${{ inputs.model }}
-          effort: ${{ inputs.effort }}
-          fail-on-severity: ${{ inputs.fail-on-severity }}
           post-comment: ${{ inputs.post-comment }}
 
-      - name: Report outputs
-        if: always()
+      - if: always()
         run: |
-          echo "findings-count:    ${{ steps.ai.outputs.findings-count }}"
-          echo "highest-severity:  ${{ steps.ai.outputs.highest-severity }}"
-          echo "findings-json:     ${{ steps.ai.outputs.findings-json }}"
+          echo "findings-count:   ${{ steps.ai.outputs.findings-count }}"
+          echo "highest-severity: ${{ steps.ai.outputs.highest-severity }}"
